@@ -1,11 +1,9 @@
 "use strict";
 
 const CONFIG = {
-  coreSource: "cdn",
   localCoreBase: "./core",
-  cdnCoreBase: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd",
-  ffmpegUmd: "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js",
-  utilUmd: "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/umd/index.js",
+  ffmpegUmd: "./vendor/ffmpeg.js",
+  utilUmd: "./vendor/util.js",
   pcmRate: 3000,
   buckets: 2200,
   storageKey: "live-splicer.edit.v1",
@@ -60,7 +58,6 @@ function setProgress(p) {
 function failCore(err) {
   log("エラー: " + (err && err.message ? err.message : err));
   pill("coreStatus", "ffmpeg-core: 失敗", "warn");
-  pill("probeStatus", "解析: 失敗", "warn");
 }
 
 function fmt(t) {
@@ -91,8 +88,13 @@ const dbToAmp = (db) => Math.pow(10, db / 20);
 
 function loadScript(src) {
   return new Promise((res, rej) => {
+    if (document.querySelector('script[data-src="' + src + '"]')) {
+      res();
+      return;
+    }
     const s = document.createElement("script");
     s.src = src;
+    s.dataset.src = src;
     s.onload = res;
     s.onerror = () => rej(new Error("スクリプトを読み込めません: " + src));
     document.head.appendChild(s);
@@ -119,10 +121,10 @@ async function blobFrom(url, mime, label) {
 async function ensureFfmpeg() {
   if (state.ready) return;
   pill("coreStatus", "ffmpeg.wasm を読み込み中…", "warn");
-  log("ffmpeg.wasm を読み込みます");
+  log("ffmpeg.wasm をこのサイトから読み込みます");
   await loadScript(CONFIG.ffmpegUmd);
   await loadScript(CONFIG.utilUmd);
-  const FFmpeg = (window.FFmpegWASM || window.ffmpegWASM || {}).FFmpeg;
+  const FFmpeg = (window.FFmpegWASM || {}).FFmpeg;
   const util = window.FFmpegUtil || {};
   if (!FFmpeg || !util.toBlobURL) throw new Error("ffmpeg.wasm の UMD ビルドが見つかりません");
   state.util = util;
@@ -134,15 +136,12 @@ async function ensureFfmpeg() {
   });
   ffmpeg.on("progress", ({ progress }) => setProgress(progress));
 
-  const base = CONFIG.cdnCoreBase;
-  log("ffmpeg-core を CDN から取得します（約 31MB）。初回だけ時間がかかります");
+  const base = CONFIG.localCoreBase;
+  log("ffmpeg-core を取得します（約 31MB）");
   const coreURL = await blobFrom(base + "/ffmpeg-core.js", "text/javascript", "core.js");
   const wasmURL = await blobFrom(base + "/ffmpeg-core.wasm", "application/wasm", "core.wasm");
   pill("coreStatus", "ffmpeg-core を起動中…", "warn");
-  await Promise.race([
-    ffmpeg.load({ coreURL, wasmURL }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("ffmpeg-core の起動が 3 分以内に終わりませんでした")), 180000)),
-  ]);
+  await ffmpeg.load({ coreURL, wasmURL });
   state.ffmpeg = ffmpeg;
   state.ready = true;
   pill("coreStatus", "ffmpeg-core: 準備完了", "ok");
@@ -623,6 +622,11 @@ function bind() {
     render();
     try {
       await ensureFfmpeg();
+    } catch (err) {
+      failCore(err);
+      return;
+    }
+    try {
       await attachInput();
       await probe();
       await buildWaveform();
@@ -632,7 +636,8 @@ function bind() {
       renderRanges();
       render();
     } catch (err) {
-      failCore(err);
+      log("エラー: " + (err && err.message ? err.message : err));
+      pill("probeStatus", "解析: 失敗", "warn");
     }
   });
 
