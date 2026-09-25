@@ -3,7 +3,6 @@
 const CONFIG = {
   localCoreBase: "./core",
   ffmpegUmd: "./vendor/ffmpeg.js",
-  utilUmd: "./vendor/util.js",
   pcmRate: 3000,
   buckets: 2200,
   storageKey: "live-splicer.edit.v1",
@@ -102,20 +101,29 @@ function loadScript(src) {
 }
 
 async function blobFrom(url, mime, label) {
+  pill("coreStatus", label + " を取得中…", "warn");
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(label + " を取得できません (" + resp.status + ")");
   const total = Number(resp.headers.get("content-length") || 0);
-  if (mime === "application/wasm" && total > 0 && total < 1000000) {
-    throw new Error("ffmpeg-core.wasm が小さすぎます (" + total + " bytes)");
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    if (total > 0) {
+      const p = received / total;
+      setProgress(p);
+      pill("coreStatus", label + ": " + Math.round(p * 100) + "%", "warn");
+      $("progText").textContent = (received / 1048576).toFixed(1) + " / " + (total / 1048576).toFixed(1) + " MB";
+    }
   }
-  pill("coreStatus", label + " を取得中…", "warn");
-  return state.util.toBlobURL(url, mime, true, ({ received, total: t }) => {
-    if (!t || t < 0) return;
-    const p = received / t;
-    setProgress(p);
-    pill("coreStatus", label + ": " + Math.round(p * 100) + "%", "warn");
-    $("progText").textContent = (received / 1048576).toFixed(1) + " / " + (t / 1048576).toFixed(1) + " MB";
-  });
+  if (mime === "application/wasm" && received < 1000000) {
+    throw new Error("ffmpeg-core.wasm が小さすぎます (" + received + " bytes)");
+  }
+  return URL.createObjectURL(new Blob(chunks, { type: mime }));
 }
 
 async function ensureFfmpeg() {
@@ -123,11 +131,8 @@ async function ensureFfmpeg() {
   pill("coreStatus", "ffmpeg.wasm を読み込み中…", "warn");
   log("ffmpeg.wasm をこのサイトから読み込みます");
   await loadScript(CONFIG.ffmpegUmd);
-  await loadScript(CONFIG.utilUmd);
   const FFmpeg = (window.FFmpegWASM || {}).FFmpeg;
-  const util = window.FFmpegUtil || {};
-  if (!FFmpeg || !util.toBlobURL) throw new Error("ffmpeg.wasm の UMD ビルドが見つかりません");
-  state.util = util;
+  if (!FFmpeg) throw new Error("ffmpeg.wasm の UMD ビルドが見つかりません");
 
   const ffmpeg = new FFmpeg();
   ffmpeg.on("log", ({ message }) => {
