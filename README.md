@@ -39,24 +39,15 @@ AAC のフレームは約 1024 サンプル（44.1kHz で約 23ms）単位なの
 カット位置が必ずその境界にスナップします。ライブ音源で MC を落とす用途では聴感上は問題になりませんが、
 「間隔なしで曲を繋ぐ」ことを最優先するならギャップレスモードを選んでください。
 
-## GitHub Pages へのデプロイ
+## GitHub Pages
 
-### 1. リポジトリを作って push
+`ffmpeg-core.wasm` はリポジトリに置きません。main への push で走る Actions が
+`@ffmpeg/core@0.12.10` を取得し、公開物の `core/` に置いてから Pages へ出します。
 
-このリポジトリ自体が公開先です。`core/` に ffmpeg-core を入れてから Pages を有効化してください（`core/README.md` 参照）。
+初回だけ **Settings → Pages → Build and deployment → Source: GitHub Actions** を選んでください。
+公開先は `https://toyfer.github.io/live-splicer/` です。
 
-### 2. Pages を有効化
-
-リポジトリの **Settings → Pages → Build and deployment → Source: Deploy from a branch → main / (root)** を選ぶと、
-`https://toyfer.github.io/live-splicer/` で公開されます。
-
-`.github/workflows/pages.yml` を残してあるので、**Source: GitHub Actions** を選べば push のたびに自動デプロイもできます。
-
-### 3. ヘッダ設定は不要
-
-ffmpeg.wasm のマルチスレッド版は `SharedArrayBuffer` を使うため COOP/COEP ヘッダが必要ですが、
-GitHub Pages は HTTP ヘッダを制御できません（仕様）。
-このアプリは **シングルスレッド版の `@ffmpeg/core` を使う** ので、COOP/COEP は不要でそのまま動きます。
+シングルスレッド版 core を使うので、COOP/COEP ヘッダは不要です。
 
 参考: [ffmpeg.wasmをGitHub Pagesで動かすよ](https://cloud.flect.co.jp/entry/2022/10/14/115344) /
 [Allow setting COOP and COEP headers in Github Pages](https://github.com/orgs/community/discussions/13309)
@@ -65,31 +56,24 @@ GitHub Pages は HTTP ヘッダを制御できません（仕様）。
 
 ```
 live-splicer/
-├── index.html                     UI
-├── app.js                         本体（ffmpeg.wasm の呼び出し・波形・区間計算）
+├── index.html
+├── app.js
 ├── style.css
-├── core/                          ffmpeg-core.js / ffmpeg-core.wasm を置く
-├── edit.sample.json               編集内容 JSON のサンプル
-└── .github/workflows/pages.yml    GitHub Actions で Pages にデプロイ
+├── core/README.md                 wasm は Actions がデプロイ時に置く
+├── edit.sample.json
+└── .github/workflows/pages.yml
 ```
 
 ## 実装メモ
 
 - 波形は ffmpeg で `-ac 1 -ar 3000 -c:a pcm_s16le` の WAV を一度だけ作り、
-  そのピークを JavaScript 側で 2200 バケットに間引いて canvas に描いています（音声全体をメモリに展開しません）。
-- ギャップレス結合は `atrim` + `concat` フィルタ（クロスフェード時は `acrossfade` を連結）で
-  **1 回の ffmpeg 実行** にまとめています。
+  そのピークを JavaScript 側で 2200 バケットに間引いて canvas に描いています。
+- ギャップレス結合は `atrim` + `concat`（クロスフェード時は `acrossfade`）で 1 回の実行にまとめています。
 - 無劣化モードは区間ごとに `-c copy` で切り出し、concat デマルチプレクサで結合します。
-- 元ファイルにアルバム画像が入っている場合は、それを出力へ引き継ぎます。
-  新しい画像を指定した場合は差し替えます。
-- タグの読み書きは ffmpeg の `ffmetadata` を使うため、
-  ffmpeg が解釈できるタグだけが対象です（それ以外の独自アトムはそのまま残ります）。
-- 大きなファイルは `WORKERFS` マウント（`ffmpeg.mount("WORKERFS", { files }, "/mnt")`、`@ffmpeg/ffmpeg@0.12.10+` / `@ffmpeg/core@0.12.4+`）で
-  メモリに読み込まずに扱います。使えない環境では自動でメモリ経由に切り替わります。
+- 元ファイルのアルバム画像は引き継ぎ、新しい画像を指定したときだけ差し替えます。
+- 大きな入力は `ffmpeg.mount("WORKERFS", { files }, "/mnt")` で読みます。使えない環境ではメモリ経由に落ちます。
 
-## 制約・注意
+## 制約
 
-- ffmpeg-core の読み込みに 30MB 前後のダウンロードが発生します（初回のみ）。
-- 出力ファイルはブラウザのメモリ上で組み立てられます。極端に長い音源（数 GB 級）では失敗することがあります。
-- 再エンコード時は元のサンプルレート・チャンネル数を維持します。
-- 「中断」は ffmpeg を終了させるため、そのあと「ffmpeg を読み込む」で復帰してください。
+- 出力ファイルはブラウザのメモリ上で組み立てられます。極端に長い音源では失敗することがあります。
+- 「中断」のあとは「ffmpeg を読み込む」で復帰してください。
