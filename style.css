@@ -6,9 +6,6 @@
   --fg: #e6e9ef;
   --muted: #98a1b3;
   --accent: #38bdf8;
-  --cut: #f87171;
-  --keep: #4ade80;
-  --sil: #64748b;
 }
 * { box-sizing: border-box; }
 body {
@@ -66,8 +63,6 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .ranges td.num { font-variant-numeric: tabular-nums; color: #cbd5e1; }
 .tag { display: inline-block; border-radius: 6px; padding: 1px 7px; font-size: 11px; }
 .tag.cut { background: #7f1d1d; color: #fecaca; }
-.tag.keep { background: #14532d; color: #bbf7d0; }
-.tag.sil { background: #334155; color: #cbd5e1; }
 .ranges button { padding: 3px 8px; font-size: 12px; }
 .modes .radio { flex: 1 1 320px; align-items: flex-start; gap: 10px; border: 1px solid var(--line);
   border-radius: 10px; padding: 10px 12px; background: var(--panel2); }
@@ -81,3 +76,17 @@ progress { width: 240px; height: 10px; }
 #result a { color: var(--accent); }
 #coverPreview img { max-height: 160px; border-radius: 10px; border: 1px solid var(--line); margin-top: 8px; }
 audio { width: 100%; margin-top: 10px; }
+.grow { flex: 1 1 260px; }
+input.wide { width: 100%; min-width: 220px; }
+.ranges input.name-input {
+  width: 100%;
+  min-width: 160px;
+  background: #1e222b;
+  color: #e6e9ef;
+  border: 1px solid #2b313d;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font: inherit;
+}
+.filelist { margin: 8px 0; padding-left: 20px; }
+.filelist li { margin: 4px 0; }
