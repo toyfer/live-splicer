@@ -21,16 +21,23 @@ jobs:
       - name: Assemble site and download ffmpeg-core
         run: |
           set -euo pipefail
-          mkdir -p site/core
-          base="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd"
-          curl -fsSL -o site/core/ffmpeg-core.js "$base/ffmpeg-core.js"
-          curl -fsSL -o site/core/ffmpeg-core.wasm "$base/ffmpeg-core.wasm"
+          mkdir -p site/core site/vendor
+          core="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd"
+          ff="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd"
+          curl -fsSL -o site/core/ffmpeg-core.js "$core/ffmpeg-core.js"
+          curl -fsSL -o site/core/ffmpeg-core.wasm "$core/ffmpeg-core.wasm"
+          curl -fsSL -o site/vendor/ffmpeg.js "$ff/ffmpeg.js"
+          curl -fsSL -o site/vendor/814.ffmpeg.js "$ff/814.ffmpeg.js"
+          curl -fsSL -o site/vendor/util.js "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/umd/index.js"
           js_size=$(wc -c < site/core/ffmpeg-core.js)
           wasm_size=$(wc -c < site/core/ffmpeg-core.wasm)
+          worker_size=$(wc -c < site/vendor/814.ffmpeg.js)
           echo "ffmpeg-core.js ${js_size} bytes"
           echo "ffmpeg-core.wasm ${wasm_size} bytes"
+          echo "814.ffmpeg.js ${worker_size} bytes"
           test "$js_size" -gt 10000
           test "$wasm_size" -gt 1000000
+          test "$worker_size" -gt 1000
           cp index.html app.js style.css site/
           cp .nojekyll site/ || : > site/.nojekyll
       - uses: actions/configure-pages@v5
