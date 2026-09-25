@@ -28,6 +28,8 @@ const state = {
   drag: null,
   cover: null,
   hasCover: false,
+  coverExt: ".jpg",
+  embeddedCover: null,
   mounted: false,
   info: {},
   logLines: [],
@@ -198,7 +200,9 @@ async function probe() {
   if (d) state.duration = Number(d[1]) * 3600 + Number(d[2]) * 60 + Number(d[3]);
   const a = text.match(/Audio:\s*([^,\n]+),\s*(\d+)\s*Hz,\s*([^,\n]+)/);
   if (a) state.info.audio = `${a[1].trim()} / ${a[2]} Hz / ${a[3].trim()}`;
+  const v = text.match(/Video:\s*([^\s,]+)/);
   state.hasCover = /Stream #0:\d+.*Video:/.test(text);
+  state.coverExt = v && /png/i.test(v[1]) ? ".png" : ".jpg";
   log(`解析結果: 長さ ${fmt(state.duration)} / 音声 ${state.info.audio || "不明"} / 画像 ${state.hasCover ? "あり" : "なし"}`);
 }
 
@@ -399,6 +403,11 @@ function coverName() {
   return "cover" + ext.toLowerCase();
 }
 
+function activeCover() {
+  if (state.cover) return coverName();
+  return state.embeddedCover;
+}
+
 function metaArgs() {
   const args = [];
   document.querySelectorAll("[data-tag]").forEach((el) => {
@@ -412,8 +421,17 @@ function trackArgs(title, index, total) {
   return [
     "-metadata", `title=${title}`,
     "-metadata", `track=${index}/${total}`,
-    "-metadata", `date=${$("m_date").value.trim() || new Date().getFullYear()}`,
   ];
+}
+
+function coverInput() {
+  const name = activeCover();
+  return name ? ["-i", name] : [];
+}
+
+function coverOutput() {
+  if (!activeCover()) return [];
+  return ["-map", "1:v:0", "-c:v", "copy", "-disposition:v:0", "attached_pic"];
 }
 
 async function prepareCover() {
@@ -422,7 +440,34 @@ async function prepareCover() {
   }
 }
 
-async function exportTracks(tracks, albumSlug) {
+async function extractEmbeddedCover() {
+  if (state.embeddedCover) {
+    await state.ffmpeg.deleteFile(state.embeddedCover).catch(() => {});
+    state.embeddedCover = null;
+  }
+  if (state.cover || !state.hasCover) return null;
+  const name = "srccover" + (state.coverExt || ".jpg");
+  const code = await state.ffmpeg.exec([
+    "-hide_banner", "-i", state.inputPath,
+    "-map", "0:v:0", "-c", "copy", "-frames:v", "1", "-y", name,
+  ]);
+  if (code !== 0) {
+    log("元ファイルのカバーを取り出せなかったので、画像なしで続けます");
+    await state.ffmpeg.deleteFile(name).catch(() => {});
+    return null;
+  }
+  const bytes = await state.ffmpeg.readFile(name).catch(() => null);
+  if (!bytes || bytes.length < 32) {
+    log("元ファイルのカバーを取り出せなかったので、画像なしで続けます");
+    await state.ffmpeg.deleteFile(name).catch(() => {});
+    return null;
+  }
+  state.embeddedCover = name;
+  log("元ファイルのカバーを取り出して、各曲に付けます");
+  return name;
+}
+
+async function exportTracks(tracks) {
   const files = [];
   const total = tracks.length;
   for (let i = 0; i < total; i++) {
@@ -432,20 +477,22 @@ async function exportTracks(tracks, albumSlug) {
     log(`トラック ${i + 1}/${total}: ${title} → ${file}`);
     setProgress(i / total);
 
-    await state.ffmpeg.exec([
-      "-hide_banner", "-i", state.inputPath,
-      ...(state.cover ? ["-i", coverName()] : []),
+    const code = await state.ffmpeg.exec([
+      "-hide_banner",
+      "-ss", k.start.toFixed(3),
+      "-t", (k.end - k.start).toFixed(3),
+      "-i", state.inputPath,
+      ...coverInput(),
       "-map", "0:a:0",
-      ...(state.cover ? ["-map", "1:v:0"] : []),
-      ...(state.hasCover && !state.cover ? ["-map", "0:v?"] : []),
-      "-ss", k.start.toFixed(3), "-t", (k.end - k.start).toFixed(3),
+      ...coverOutput(),
       "-c:a", "copy",
-      ...(state.cover || state.hasCover ? ["-c:v", "copy", "-disposition:v:0", "attached_pic"] : []),
       "-avoid_negative_ts", "make_zero",
       ...trackArgs(title, i + 1, total),
       ...metaArgs(),
-      "-movflags", "+faststart", "-y", file,
+      "-movflags", "+faststart",
+      "-y", file,
     ]);
+    if (code !== 0) throw new Error("トラックの書き出しに失敗しました: " + title);
 
     const data = await state.ffmpeg.readFile(file);
     files.push({ file, bytes: data.slice(0) });
@@ -480,41 +527,45 @@ async function exportJoined(tracks, outName, gapless) {
       filter += ";" + tracks.map((_, i) => `[a${i}]`).join("") + `concat=n=${tracks.length}:v=0:a=1[out]`;
     }
 
-    await state.ffmpeg.exec([
+    const code = await state.ffmpeg.exec([
       "-hide_banner", "-i", state.inputPath,
-      ...(state.cover ? ["-i", coverName()] : []),
+      ...coverInput(),
       "-filter_complex", filter, "-map", "[out]",
-      ...(state.cover ? ["-map", "1:v:0", "-c:v", "copy", "-disposition:v:0", "attached_pic"] : []),
+      ...coverOutput(),
       ...metaArgs(),
       "-c:a", "aac", "-b:a", `${bitrate}k`, "-movflags", "+faststart", "-y", outName,
     ]);
+    if (code !== 0) throw new Error("結合の書き出しに失敗しました");
   } else {
     const segs = [];
     for (let i = 0; i < tracks.length; i++) {
       const k = tracks[i];
       const seg = `seg${i}.m4a`;
       segs.push(seg);
-      await state.ffmpeg.exec([
-        "-hide_banner", "-i", state.inputPath,
-        "-ss", k.start.toFixed(3), "-t", (k.end - k.start).toFixed(3),
+      const code = await state.ffmpeg.exec([
+        "-hide_banner",
+        "-ss", k.start.toFixed(3),
+        "-t", (k.end - k.start).toFixed(3),
+        "-i", state.inputPath,
         "-map", "0:a:0", "-c", "copy", "-avoid_negative_ts", "make_zero", "-y", seg,
       ]);
+      if (code !== 0) throw new Error("区間の切り出しに失敗しました");
     }
     await state.ffmpeg.writeFile("list.txt", segs.map((s) => `file '${s}'`).join("\n"));
-    await state.ffmpeg.exec([
+    const joined = await state.ffmpeg.exec([
       "-hide_banner", "-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "-y", "joined.m4a",
     ]);
-    await state.ffmpeg.exec([
+    if (joined !== 0) throw new Error("区間の結合に失敗しました");
+    const muxed = await state.ffmpeg.exec([
       "-hide_banner", "-i", "joined.m4a",
-      ...(state.cover ? ["-i", coverName()] : []),
+      ...coverInput(),
       "-map", "0:a:0",
-      ...(state.cover ? ["-map", "1:v:0"] : []),
-      ...(state.hasCover && !state.cover ? ["-map", "0:v?"] : []),
+      ...coverOutput(),
       "-c:a", "copy",
-      ...(state.cover || state.hasCover ? ["-c:v", "copy", "-disposition:v:0", "attached_pic"] : []),
       ...metaArgs(),
       "-movflags", "+faststart", "-y", outName,
     ]);
+    if (muxed !== 0) throw new Error("結合ファイルの書き出しに失敗しました");
     for (const s of segs) await state.ffmpeg.deleteFile(s).catch(() => {});
     await state.ffmpeg.deleteFile("list.txt").catch(() => {});
     await state.ffmpeg.deleteFile("joined.m4a").catch(() => {});
@@ -527,6 +578,14 @@ function linkResult(file, bytes) {
   state.urls.push(url);
   const mb = (blob.size / 1048576).toFixed(1);
   return `<a href="${url}" download="${file}">${file}</a> <span class="muted">(${mb} MB)</span>`;
+}
+
+async function cleanupCover() {
+  if (state.cover) await state.ffmpeg.deleteFile(coverName()).catch(() => {});
+  if (state.embeddedCover) {
+    await state.ffmpeg.deleteFile(state.embeddedCover).catch(() => {});
+    state.embeddedCover = null;
+  }
 }
 
 async function run() {
@@ -547,11 +606,13 @@ async function run() {
   try {
     await attachInput();
     await prepareCover();
+    await extractEmbeddedCover();
+    const cuts = state.ranges.filter((r) => r.mode === "cut");
+    if (cuts.length) log(`カット ${cuts.length} 件は書き出しに使いません`);
 
     if (output === "tracks") {
-      const album = safeName($("m_album").value, "live");
       log(`書き出し開始: 曲ごとに分割 / ${tracks.length} 曲`);
-      const files = await exportTracks(tracks, album);
+      const files = await exportTracks(tracks);
       $("result").innerHTML =
         `<p><b>完成:</b> ${files.length} 曲を書き出しました</p>` +
         `<ul class="filelist">${files.map((f) => `<li>${linkResult(f.file, f.bytes)}</li>`).join("")}</ul>` +
@@ -567,7 +628,7 @@ async function run() {
       log(`書き出し完了: ${outName}`);
       await state.ffmpeg.deleteFile(outName).catch(() => {});
     }
-    if (state.cover) await state.ffmpeg.deleteFile(coverName()).catch(() => {});
+    await cleanupCover();
     setProgress(1);
   } finally {
     state.running = false;
@@ -670,6 +731,7 @@ function bind() {
     state.peak = null;
     state.silences = [];
     state.ranges = [];
+    state.embeddedCover = null;
     $("fileInfo").textContent = `${f.name}（${(f.size / 1048576).toFixed(1)} MB）`;
     player.src = URL.createObjectURL(f);
     $("outName").value = f.name.replace(/\.[^.]+$/, "") + "-joined.m4a";
@@ -735,6 +797,7 @@ function bind() {
     renderRanges();
     render();
     saveLocal();
+    log("カットは一覧と波形だけの印です。書き出しには使いません");
   });
   $("btnClearSel").addEventListener("click", () => {
     state.selection = null;
@@ -760,7 +823,7 @@ function bind() {
         n++;
       }
     }
-    log(`無音 ${n} 件をカットに追加しました`);
+    log(`無音 ${n} 件をカットに追加しました。書き出しには使いません`);
     renderRanges();
     render();
     saveLocal();
@@ -841,6 +904,7 @@ function bind() {
     state.ready = false;
     state.inputPath = null;
     state.mounted = false;
+    state.embeddedCover = null;
     state.running = false;
     $("btnRun").disabled = false;
     $("btnCancel").disabled = true;
