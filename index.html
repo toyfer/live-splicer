@@ -34,6 +34,7 @@
     <p class="muted small">
       波形をドラッグしてから「トラックにする」を押すと、選択範囲が 1 曲として追加されます。
       赤 = カット（書き出しには使いません）、緑 = 出力するトラック、灰 = 自動検出した無音。
+      一覧の開始・終了は秒または分:秒で直接編集できます。
     </p>
     <div class="row">
       <label class="grow">選択範囲の曲名
@@ -41,6 +42,7 @@
       </label>
       <button id="btnAddKeep">トラックにする</button>
       <button id="btnAddCut">カットに追加</button>
+      <button id="btnInvertCuts" class="ghost">カットの残りをトラックにする</button>
       <button id="btnClearSel" class="ghost">選択解除</button>
       <button id="btnClearAll" class="ghost">全消去</button>
     </div>
@@ -55,7 +57,7 @@
     </fieldset>
 
     <div id="keepSummary" class="muted small"></div>
-    <table id="ranges" class="ranges"></table>
+    <div class="tablewrap"><table id="ranges" class="ranges"></table></div>
   </section>
 
   <section class="card">
@@ -71,7 +73,7 @@
       </label>
       <label class="radio">
         <input type="radio" name="output" value="gapless">
-        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">AAC を 1 回だけ再エンコードして結合します</span></span>
+        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">AAC を 1 回だけ再エンコードして結合します。クロスフェードを使うと継ぎ目の分だけ全長が短くなります</span></span>
       </label>
     </div>
     <div class="row">
@@ -139,6 +141,6 @@
   </section>
 </main>
 
-<script src="./app.js?v=8"></script>
+<script src="./app.js?v=9"></script>
 </body>
 </html>
