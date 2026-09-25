@@ -1,0 +1,27 @@
+{
+  "app": "live-splicer",
+  "version": 1,
+  "source": { "name": "live-2026-09-25.m4a", "size": 214958080, "duration": 7320.5 },
+  "ranges": [
+    { "mode": "cut", "start": 0, "end": 42.8 },
+    { "mode": "cut", "start": 285.1, "end": 372.4 },
+    { "mode": "cut", "start": 742.9, "end": 861.2 }
+  ],
+  "settings": {
+    "mode": "gapless",
+    "bitrate": 256,
+    "crossfadeMs": 30,
+    "useCrossfade": true,
+    "outName": "live-2026-09-25-spliced.m4a",
+    "silThr": -35,
+    "silMin": 1.5,
+    "silPad": 0.15
+  },
+  "meta": {
+    "title": "Live 2026-09-25",
+    "artist": "Your Band",
+    "album": "Live at Somewhere",
+    "genre": "Rock",
+    "date": "2026"
+  }
+}

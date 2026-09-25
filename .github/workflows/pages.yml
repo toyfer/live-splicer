@@ -1,0 +1,41 @@
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site and download ffmpeg-core
+        run: |
+          set -euo pipefail
+          mkdir -p site/core
+          base="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd"
+          curl -fsSL -o site/core/ffmpeg-core.js "$base/ffmpeg-core.js"
+          curl -fsSL -o site/core/ffmpeg-core.wasm "$base/ffmpeg-core.wasm"
+          js_size=$(wc -c < site/core/ffmpeg-core.js)
+          wasm_size=$(wc -c < site/core/ffmpeg-core.wasm)
+          echo "ffmpeg-core.js ${js_size} bytes"
+          echo "ffmpeg-core.wasm ${wasm_size} bytes"
+          test "$js_size" -gt 10000
+          test "$wasm_size" -gt 1000000
+          cp index.html app.js style.css site/
+          cp .nojekyll site/ || : > site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
