@@ -1,11 +1,11 @@
 "use strict";
 
 const CONFIG = {
-  coreSource: "local",
+  coreSource: "cdn",
   localCoreBase: "./core",
-  cdnCoreBase: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12/dist/umd",
-  ffmpegUmd: "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12/dist/umd/ffmpeg.js",
-  utilUmd: "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12/dist/umd/index.js",
+  cdnCoreBase: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd",
+  ffmpegUmd: "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js",
+  utilUmd: "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/umd/index.js",
   pcmRate: 3000,
   buckets: 2200,
   storageKey: "live-splicer.edit.v1",
@@ -57,6 +57,12 @@ function setProgress(p) {
   $("progText").textContent = p ? Math.round(p * 100) + "%" : "";
 }
 
+function failCore(err) {
+  log("エラー: " + (err && err.message ? err.message : err));
+  pill("coreStatus", "ffmpeg-core: 失敗", "warn");
+  pill("probeStatus", "解析: 失敗", "warn");
+}
+
 function fmt(t) {
   if (!isFinite(t) || t < 0) t = 0;
   const h = Math.floor(t / 3600);
@@ -93,10 +99,27 @@ function loadScript(src) {
   });
 }
 
+async function blobFrom(url, mime, label) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(label + " を取得できません (" + resp.status + ")");
+  const total = Number(resp.headers.get("content-length") || 0);
+  if (mime === "application/wasm" && total > 0 && total < 1000000) {
+    throw new Error("ffmpeg-core.wasm が小さすぎます (" + total + " bytes)");
+  }
+  pill("coreStatus", label + " を取得中…", "warn");
+  return state.util.toBlobURL(url, mime, true, ({ received, total: t }) => {
+    if (!t || t < 0) return;
+    const p = received / t;
+    setProgress(p);
+    pill("coreStatus", label + ": " + Math.round(p * 100) + "%", "warn");
+    $("progText").textContent = (received / 1048576).toFixed(1) + " / " + (t / 1048576).toFixed(1) + " MB";
+  });
+}
+
 async function ensureFfmpeg() {
   if (state.ready) return;
-  pill("coreStatus", "ffmpeg-core: 読み込み中…", "warn");
-  log("ffmpeg.wasm を読み込みます（初回は 30MB 前後のダウンロード）");
+  pill("coreStatus", "ffmpeg.wasm を読み込み中…", "warn");
+  log("ffmpeg.wasm を読み込みます");
   await loadScript(CONFIG.ffmpegUmd);
   await loadScript(CONFIG.utilUmd);
   const FFmpeg = (window.FFmpegWASM || window.ffmpegWASM || {}).FFmpeg;
@@ -111,12 +134,15 @@ async function ensureFfmpeg() {
   });
   ffmpeg.on("progress", ({ progress }) => setProgress(progress));
 
-  const base = CONFIG.coreSource === "local" ? CONFIG.localCoreBase : CONFIG.cdnCoreBase;
-  await ffmpeg.load({
-    coreURL: await util.toBlobURL(base + "/ffmpeg-core.js", "text/javascript"),
-    wasmURL: await util.toBlobURL(base + "/ffmpeg-core.wasm", "application/wasm"),
-  });
-
+  const base = CONFIG.cdnCoreBase;
+  log("ffmpeg-core を CDN から取得します（約 31MB）。初回だけ時間がかかります");
+  const coreURL = await blobFrom(base + "/ffmpeg-core.js", "text/javascript", "core.js");
+  const wasmURL = await blobFrom(base + "/ffmpeg-core.wasm", "application/wasm", "core.wasm");
+  pill("coreStatus", "ffmpeg-core を起動中…", "warn");
+  await Promise.race([
+    ffmpeg.load({ coreURL, wasmURL }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("ffmpeg-core の起動が 3 分以内に終わりませんでした")), 180000)),
+  ]);
   state.ffmpeg = ffmpeg;
   state.ready = true;
   pill("coreStatus", "ffmpeg-core: 準備完了", "ok");
@@ -580,7 +606,7 @@ function restoreLocal() {
 }
 
 function bind() {
-  $("btnLoad").addEventListener("click", () => ensureFfmpeg().catch((e) => log("エラー: " + e.message)));
+  $("btnLoad").addEventListener("click", () => ensureFfmpeg().catch(failCore));
 
   $("file").addEventListener("change", async (e) => {
     const f = e.target.files[0];
@@ -606,8 +632,7 @@ function bind() {
       renderRanges();
       render();
     } catch (err) {
-      log("エラー: " + err.message);
-      pill("probeStatus", "解析: 失敗", "warn");
+      failCore(err);
     }
   });
 
@@ -769,4 +794,4 @@ function bind() {
 bind();
 renderRanges();
 render();
-log("準備完了。音源を選ぶと ffmpeg.wasm を読み込んで解析を始めます");
+log("準備完了。音源を選ぶと ffmpeg-core（約 31MB）の取得が始まります");
