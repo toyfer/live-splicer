@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Splicer — ライブ音源をライブラリ用トラックへ</title>
+<link rel="stylesheet" href="./style.css?v=4">
+</head>
+<body>
+<header class="top">
+  <h1>Live Splicer</h1>
+  <p class="sub">
+    AAC のライブ音源から MC・インターバルを切り、残した区間を曲ごとのトラックとして書き出します。
+    処理はブラウザ内で完結します。
+  </p>
+  <div class="status">
+    <span id="coreStatus" class="pill">ffmpeg-core: 未読み込み</span>
+    <span id="probeStatus" class="pill">解析: 未実行</span>
+    <button id="btnLoad" class="ghost">ffmpeg を読み込む</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. 音源を読み込む</h2>
+    <input type="file" id="file" accept="audio/*,video/mp4,.m4a,.m4b,.mp3,.wav,.flac,.aac">
+    <div id="fileInfo" class="muted">未選択</div>
+    <audio id="player" controls preload="metadata"></audio>
+  </section>
+
+  <section class="card">
+    <h2>2. 波形を見て曲を作る</h2>
+    <div class="wavewrap"><canvas id="wave" height="280"></canvas></div>
+    <p class="muted small">
+      波形をドラッグしてから「トラックにする」を押すと、選択範囲が 1 曲として追加されます。
+      赤 = カット（書き出しには使いません）、緑 = 出力するトラック、灰 = 自動検出した無音。
+      一覧の開始・終了は秒または分:秒で直接編集できます。
+    </p>
+    <div class="row">
+      <label class="grow">選択範囲の曲名
+        <input type="text" id="trackTitle" class="wide" placeholder="例: 01 曲名">
+      </label>
+      <button id="btnAddKeep">トラックにする</button>
+      <button id="btnAddCut">カットに追加</button>
+      <button id="btnInvertCuts" class="ghost">カットの残りをトラックにする</button>
+      <button id="btnClearSel" class="ghost">選択解除</button>
+      <button id="btnClearAll" class="ghost">全消去</button>
+    </div>
+
+    <fieldset class="sil">
+      <legend>無音（MC の切れ目）を自動検出</legend>
+      <label>しきい値 <input type="number" id="silThr" value="-35" step="1"> dB</label>
+      <label>最短 <input type="number" id="silMin" value="1.5" step="0.1"> 秒</label>
+      <label>余白 <input type="number" id="silPad" value="0.15" step="0.05"> 秒</label>
+      <button id="btnDetect">検出</button>
+      <button id="btnApplySilence">検出した無音をカットに追加</button>
+    </fieldset>
+
+    <div id="keepSummary" class="muted small"></div>
+    <div class="tablewrap"><table id="ranges" class="ranges"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>3. 出力設定</h2>
+    <div class="row modes">
+      <label class="radio">
+        <input type="radio" name="output" value="tracks" checked>
+        <span><b>曲ごとに分割（ライブラリ向け・無劣化）</b><br><span class="muted small">各区間を別の M4A にし、曲名・アルバム・トラック番号を書きます。ミュージックに入れる想定</span></span>
+      </label>
+      <label class="radio">
+        <input type="radio" name="output" value="joined">
+        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間を AAC のまま繋ぎます。継ぎ目はフレーム境界で、曲間ゼロは保証しません</span></span>
+      </label>
+      <label class="radio">
+        <input type="radio" name="output" value="gapless">
+        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">AAC を 1 回だけ再エンコードして結合します。クロスフェードを使うと継ぎ目の分だけ全長が短くなります</span></span>
+      </label>
+    </div>
+    <div class="row">
+      <label>ビットレート
+        <select id="bitrate">
+          <option value="128">128 kbps</option>
+          <option value="192">192 kbps</option>
+          <option value="256" selected>256 kbps</option>
+          <option value="320">320 kbps</option>
+        </select>
+      </label>
+      <label>結合部のクロスフェード
+        <input type="checkbox" id="xuse" checked>
+        <input type="number" id="xfade" value="30" step="5" min="0" max="500"> ms
+      </label>
+      <label>結合時のファイル名 <input type="text" id="outName" value="live-spliced.m4a"></label>
+    </div>
+    <p class="muted small">分割と無劣化結合は AAC をコピーします。カット位置はフレーム境界に丸まります。ミュージックの曲間を無音ゼロにする保証はありません。年が空なら元の年を残します。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 共通メタデータとアルバム画像</h2>
+    <div class="row">
+      <button id="btnReadTags" class="ghost">元ファイルのタグを読み込む</button>
+      <span class="muted small">タイトルだけ各トラックで上書きします。</span>
+    </div>
+    <div class="grid2">
+      <label>アルバム <input type="text" id="m_album" data-tag="album"></label>
+      <label>アーティスト <input type="text" id="m_artist" data-tag="artist"></label>
+      <label>アルバムアーティスト <input type="text" id="m_album_artist" data-tag="album_artist"></label>
+      <label>ジャンル <input type="text" id="m_genre" data-tag="genre"></label>
+      <label>年 <input type="text" id="m_date" data-tag="date"></label>
+      <label>作曲 <input type="text" id="m_composer" data-tag="composer"></label>
+    </div>
+    <label>コメント <input type="text" id="m_comment" data-tag="comment"></label>
+    <label>歌詞・メモ <textarea id="m_lyrics" data-tag="lyrics" rows="2"></textarea></label>
+    <div class="row">
+      <label>アルバム画像 <input type="file" id="cover" accept="image/jpeg,image/png"></label>
+      <button id="btnClearCover" class="ghost">画像を外す</button>
+      <span id="coverInfo" class="muted small">未選択</span>
+    </div>
+    <div id="coverPreview"></div>
+  </section>
+
+  <section class="card">
+    <h2>5. 書き出す</h2>
+    <div class="row">
+      <button id="btnRun" class="primary">書き出す</button>
+      <button id="btnCancel" class="ghost" disabled>中断</button>
+      <progress id="prog" max="1" value="0"></progress>
+      <span id="progText" class="muted small"></span>
+    </div>
+    <div id="result"></div>
+    <pre id="log" class="log"></pre>
+  </section>
+
+  <section class="card">
+    <h2>編集内容の保存 / 読み込み</h2>
+    <div class="row">
+      <button id="btnSaveJson">JSON をダウンロード</button>
+      <label class="filelabel">JSON を読み込む <input type="file" id="jsonFile" accept="application/json,.json"></label>
+      <button id="btnRestore" class="ghost">自動保存から復元</button>
+      <span id="jsonInfo" class="muted small"></span>
+    </div>
+  </section>
+</main>
+
+<script src="./app.js?v=10"></script>
+</body>
+</html>
