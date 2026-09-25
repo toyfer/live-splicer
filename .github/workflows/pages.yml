@@ -18,10 +18,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild app.js from base64 parts
+      - name: Rebuild app.js from gzipped base64 payload
         run: |
           set -euo pipefail
-          cat b64_*.txt | tr -d '\n' | base64 -d > app.js
+          base64 -d app.js.gz.b64 | gunzip > app.js
           test "$(wc -c < app.js)" -gt 30000
           node --check app.js
       - name: Assemble site and download ffmpeg-core
