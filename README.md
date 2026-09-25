@@ -1,2 +1,95 @@
-# live-splicer
-Browser-only editor that cuts MC and joins live AAC/M4A without gaps. ffmpeg.wasm, GitHub Pages.
+# Live Splicer
+
+1 本のライブ音源（AAC / M4A など）から **MC・インターバルを切り落とし、曲を間隔なしで繋いで 1 本にまとめる**
+ブラウザ完結型のツールです。処理はすべて ffmpeg.wasm で行われるため、音源がサーバへ送信されることはありません。
+
+## できること
+
+- 波形を見ながらカット位置を決める（ドラッグで範囲選択）
+- 無音区間（MC の切れ目）を自動検出してカット候補に追加
+- 曲を **ギャップレス** で連結（AAC で 1 回だけ再エンコード）
+- 音質を一切変えずに切り貼り（`-c copy` の無劣化モード）
+- メタデータ（タイトル / アーティスト / アルバム / ジャンル / 年 / 歌詞 など）の編集
+- アルバム画像の差し込み（`covr` アトムとして埋め込み）
+- 編集内容を JSON で保存・再読込（自動保存つき）
+
+## 使い方
+
+1. 音源ファイルを選ぶ（自動で ffmpeg-core を読み込み、解析と波形生成が走ります）
+2. 波形をドラッグして「カット」または「残す」に追加する
+   - 「無音を検出」→「検出した無音をカットに追加」で MC 区間をまとめて落とすのが早道です
+   - 赤 = カット、緑 = 残す、灰 = 自動検出した無音、黄 = 再生ヘッド
+   - 区間の「試聴」ボタンで切り位置を耳で確認できます
+3. 出力モードを選ぶ（迷ったら **ギャップレス**）
+4. 必要ならメタデータとアルバム画像を設定
+5. 「書き出す」→ 完了したらダウンロード
+
+## 2 つの出力モードの違い
+
+| | ギャップレス（推奨） | 無劣化 |
+|---|---|---|
+| 中身 | AAC で 1 回だけ再エンコード | `-c copy` でビット列をそのまま切り貼り |
+| 結合部 | 完全に繋がる（クロスフェードも選べる） | 微小な隙間・クリックが出ることがある |
+| カット位置 | サンプル単位で指定どおり | AAC フレーム境界（約 23ms）に丸まる |
+| 音質 | 再エンコード分わずかに変化 | 元と完全に同一 |
+| 速度 | 音源の長さに比例（数分） | ほぼ一瞬 |
+| 容量 | 指定ビットレート次第 | 元とほぼ同じ |
+
+AAC のフレームは約 1024 サンプル（44.1kHz で約 23ms）単位なので、無劣化モードでは
+カット位置が必ずその境界にスナップします。ライブ音源で MC を落とす用途では聴感上は問題になりませんが、
+「間隔なしで曲を繋ぐ」ことを最優先するならギャップレスモードを選んでください。
+
+## GitHub Pages へのデプロイ
+
+### 1. リポジトリを作って push
+
+このリポジトリ自体が公開先です。`core/` に ffmpeg-core を入れてから Pages を有効化してください（`core/README.md` 参照）。
+
+### 2. Pages を有効化
+
+リポジトリの **Settings → Pages → Build and deployment → Source: Deploy from a branch → main / (root)** を選ぶと、
+`https://toyfer.github.io/live-splicer/` で公開されます。
+
+`.github/workflows/pages.yml` を残してあるので、**Source: GitHub Actions** を選べば push のたびに自動デプロイもできます。
+
+### 3. ヘッダ設定は不要
+
+ffmpeg.wasm のマルチスレッド版は `SharedArrayBuffer` を使うため COOP/COEP ヘッダが必要ですが、
+GitHub Pages は HTTP ヘッダを制御できません（仕様）。
+このアプリは **シングルスレッド版の `@ffmpeg/core` を使う** ので、COOP/COEP は不要でそのまま動きます。
+
+参考: [ffmpeg.wasmをGitHub Pagesで動かすよ](https://cloud.flect.co.jp/entry/2022/10/14/115344) /
+[Allow setting COOP and COEP headers in Github Pages](https://github.com/orgs/community/discussions/13309)
+
+## 構成
+
+```
+live-splicer/
+├── index.html                     UI
+├── app.js                         本体（ffmpeg.wasm の呼び出し・波形・区間計算）
+├── style.css
+├── core/                          ffmpeg-core.js / ffmpeg-core.wasm を置く
+├── edit.sample.json               編集内容 JSON のサンプル
+└── .github/workflows/pages.yml    GitHub Actions で Pages にデプロイ
+```
+
+## 実装メモ
+
+- 波形は ffmpeg で `-ac 1 -ar 3000 -c:a pcm_s16le` の WAV を一度だけ作り、
+  そのピークを JavaScript 側で 2200 バケットに間引いて canvas に描いています（音声全体をメモリに展開しません）。
+- ギャップレス結合は `atrim` + `concat` フィルタ（クロスフェード時は `acrossfade` を連結）で
+  **1 回の ffmpeg 実行** にまとめています。
+- 無劣化モードは区間ごとに `-c copy` で切り出し、concat デマルチプレクサで結合します。
+- 元ファイルにアルバム画像が入っている場合は、それを出力へ引き継ぎます。
+  新しい画像を指定した場合は差し替えます。
+- タグの読み書きは ffmpeg の `ffmetadata` を使うため、
+  ffmpeg が解釈できるタグだけが対象です（それ以外の独自アトムはそのまま残ります）。
+- 大きなファイルは `WORKERFS` マウント（`ffmpeg.mount("WORKERFS", { files }, "/mnt")`、`@ffmpeg/ffmpeg@0.12.10+` / `@ffmpeg/core@0.12.4+`）で
+  メモリに読み込まずに扱います。使えない環境では自動でメモリ経由に切り替わります。
+
+## 制約・注意
+
+- ffmpeg-core の読み込みに 30MB 前後のダウンロードが発生します（初回のみ）。
+- 出力ファイルはブラウザのメモリ上で組み立てられます。極端に長い音源（数 GB 級）では失敗することがあります。
+- 再エンコード時は元のサンプルレート・チャンネル数を維持します。
+- 「中断」は ffmpeg を終了させるため、そのあと「ffmpeg を読み込む」で復帰してください。
