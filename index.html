@@ -10,8 +10,8 @@
 <header class="top">
   <h1>Live Splicer</h1>
   <p class="sub">
-    AAC のライブ音源から MC・インターバルを切り、残した区間を曲ごとのトラックとして書き出します。
-    処理はブラウザ内で完結します。
+    AAC のライブ音源を指定位置で切り、前と後ろに曲名を付けて、ミュージックが別トラックとして読む M4A にします。
+    1本のまま曲一覧へ並べることはできないので、曲ごとにファイルを分けます。処理はブラウザ内で完結します。
   </p>
   <div class="status">
     <span id="coreStatus" class="pill">ffmpeg-core: 未読み込み</span>
@@ -29,17 +29,24 @@
   </section>
 
   <section class="card">
-    <h2>2. 波形を見て曲を作る</h2>
+    <h2>2. 境目を決めて曲名を付ける</h2>
     <div class="wavewrap"><canvas id="wave" height="280"></canvas></div>
     <p class="muted small">
-      波形をドラッグしてから「トラックにする」を押すと、選択範囲が 1 曲として追加されます。
-      赤 = カット、緑 = 出力するトラック、灰 = 自動検出した無音。
+      再生ヘッド（黄）を境目に止めて「この位置で前後をトラックにする」を押すと、前が1曲、後ろが1曲になります。
+      MC は赤のカットにしてから「カット以外をトラックにする」。緑が書き出す曲です。
     </p>
     <div class="row">
-      <label class="grow">選択範囲の曲名
-        <input type="text" id="trackTitle" class="wide" placeholder="例: 01 曲名">
+      <label class="grow">前の曲名
+        <input type="text" id="trackTitle" class="wide" placeholder="例: 曲A">
       </label>
-      <button id="btnAddKeep">トラックにする</button>
+      <label class="grow">後ろの曲名
+        <input type="text" id="trackTitleBack" class="wide" placeholder="例: 曲B">
+      </label>
+    </div>
+    <div class="row">
+      <button id="btnSplit">この位置で前後をトラックにする</button>
+      <button id="btnCutsToTracks">カット以外をトラックにする</button>
+      <button id="btnAddKeep">選択範囲をトラックにする</button>
       <button id="btnAddCut">カットに追加</button>
       <button id="btnClearSel" class="ghost">選択解除</button>
       <button id="btnClearAll" class="ghost">全消去</button>
@@ -67,7 +74,7 @@
       </label>
       <label class="radio">
         <input type="radio" name="output" value="joined">
-        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間だけを隙間なくつなげます</span></span>
+        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間だけを隙間なくつなげます。曲一覧には1曲のままです</span></span>
       </label>
       <label class="radio">
         <input type="radio" name="output" value="gapless">
@@ -89,14 +96,14 @@
       </label>
       <label>結合時のファイル名 <input type="text" id="outName" value="live-spliced.m4a"></label>
     </div>
-    <p class="muted small">分割と結合は AAC のビット列をそのままコピーします。カット位置は AAC フレーム境界に丸まります。</p>
+    <p class="muted small">分割と無劣化結合は AAC のビット列をそのままコピーします。カット位置は AAC フレーム境界（約 23ms）に丸まります。ビットレートとクロスフェードは再エンコード結合だけに効きます。</p>
   </section>
 
   <section class="card">
     <h2>4. 共通メタデータとアルバム画像</h2>
     <div class="row">
       <button id="btnReadTags" class="ghost">元ファイルのタグを読み込む</button>
-      <span class="muted small">タイトルだけ各トラックで上書きします。</span>
+      <span class="muted small">曲名とトラック番号だけ各ファイルで上書きします。空欄の年は元の値を残します。</span>
     </div>
     <div class="grid2">
       <label>アルバム <input type="text" id="m_album" data-tag="album"></label>
@@ -111,7 +118,7 @@
     <div class="row">
       <label>アルバム画像 <input type="file" id="cover" accept="image/jpeg,image/png"></label>
       <button id="btnClearCover" class="ghost">画像を外す</button>
-      <span id="coverInfo" class="muted small">未選択</span>
+      <span id="coverInfo" class="muted small">未選択（JPEG の方がミュージックで確実です）</span>
     </div>
     <div id="coverPreview"></div>
   </section>
@@ -139,6 +146,6 @@
   </section>
 </main>
 
-<script src="./app.js?v=6"></script>
+<script src="./app.js?v=7"></script>
 </body>
 </html>
