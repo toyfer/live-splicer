@@ -33,7 +33,7 @@
     <div class="wavewrap"><canvas id="wave" height="280"></canvas></div>
     <p class="muted small">
       波形をドラッグしてから「トラックにする」を押すと、選択範囲が 1 曲として追加されます。
-      赤 = カット、緑 = 出力するトラック、灰 = 自動検出した無音。
+      赤 = カット（書き出しには使いません）、緑 = 出力するトラック、灰 = 自動検出した無音。
     </p>
     <div class="row">
       <label class="grow">選択範囲の曲名
@@ -67,7 +67,7 @@
       </label>
       <label class="radio">
         <input type="radio" name="output" value="joined">
-        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間だけを隙間なくつなげます</span></span>
+        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間を AAC のまま繋ぎます。継ぎ目はフレーム境界で、曲間ゼロは保証しません</span></span>
       </label>
       <label class="radio">
         <input type="radio" name="output" value="gapless">
@@ -89,7 +89,7 @@
       </label>
       <label>結合時のファイル名 <input type="text" id="outName" value="live-spliced.m4a"></label>
     </div>
-    <p class="muted small">分割と結合は AAC のビット列をそのままコピーします。カット位置は AAC フレーム境界に丸まります。</p>
+    <p class="muted small">分割と無劣化結合は AAC をコピーします。カット位置はフレーム境界に丸まります。ミュージックの曲間を無音ゼロにする保証はありません。年が空なら元の年を残します。</p>
   </section>
 
   <section class="card">
@@ -139,6 +139,6 @@
   </section>
 </main>
 
-<script src="./app.js?v=6"></script>
+<script src="./app.js?v=7"></script>
 </body>
 </html>
