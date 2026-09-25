@@ -30,7 +30,7 @@ jobs:
           curl -fsSL -o site/vendor/814.ffmpeg.js "$ff/814.ffmpeg.js"
           test "$(wc -c < site/core/ffmpeg-core.wasm)" -gt 1000000
           cp index.html app.js style.css site/
-          cp lib/fflate.mjs site/lib/
+          curl -fsSL -o site/lib/fflate.mjs "https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm"
           cp .nojekyll site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
