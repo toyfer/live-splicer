@@ -21,6 +21,7 @@ jobs:
       - name: Rebuild app.js from gzipped base64 payload
         run: |
           set -euo pipefail
+          python3 -c 'from pathlib import Path; p=Path("app.js.gz.b64"); t=p.read_text(); p.write_text(t.replace("BWsW6ChinG0TS","BWsW6KinG0TS",1))'
           base64 -d app.js.gz.b64 | gunzip > app.js
           test "$(wc -c < app.js)" -gt 30000
           node --check app.js
