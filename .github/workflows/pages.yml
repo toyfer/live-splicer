@@ -38,6 +38,8 @@ jobs:
           cp index.html style.css site/
           cp js/*.js site/js/
           curl -fsSL -o site/lib/fflate.mjs "https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm"
+          mkdir -p site/js/lib
+          cp site/lib/fflate.mjs site/js/lib/fflate.mjs
           cp .nojekyll site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
