@@ -18,16 +18,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Rebuild app.js from gzipped base64 payload
+      - name: Check scripts
         run: |
           set -euo pipefail
-          base64 -d app.js.gz.b64 | gunzip > app.js
-          test "$(wc -c < app.js)" -gt 30000
-          node --check app.js
+          for f in js/*.js; do
+            node --check "$f"
+          done
       - name: Assemble site and download ffmpeg-core
         run: |
           set -euo pipefail
-          mkdir -p site/core site/vendor site/lib
+          mkdir -p site/js site/core site/vendor site/lib
           core="https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd"
           ff="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd"
           curl -fsSL -o site/core/ffmpeg-core.js "$core/ffmpeg-core.js"
@@ -35,7 +35,8 @@ jobs:
           curl -fsSL -o site/vendor/ffmpeg.js "$ff/ffmpeg.js"
           curl -fsSL -o site/vendor/814.ffmpeg.js "$ff/814.ffmpeg.js"
           test "$(wc -c < site/core/ffmpeg-core.wasm)" -gt 1000000
-          cp index.html app.js style.css site/
+          cp index.html style.css site/
+          cp js/*.js site/js/
           curl -fsSL -o site/lib/fflate.mjs "https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm"
           cp .nojekyll site/
       - uses: actions/configure-pages@v5
