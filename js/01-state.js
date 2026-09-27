@@ -166,13 +166,20 @@ function ffTime(t) {
 
 function copyCutArgs(k) {
   const r = snapRange(k.start, k.end);
-  return ["-ss", ffTime(r.start), "-t", ffTime(Math.max(0, r.end - r.start))];
+  const fd = state.audio && state.audio.snap ? state.audio.frameDur : 0;
+  let ss = r.start;
+  let dur = Math.max(0, r.end - r.start);
+  if (fd > 0) {
+    ss = Math.max(0, r.start - 2 * fd);
+    dur = Math.max(fd, dur - fd);
+  }
+  return ["-ss", ffTime(ss), "-t", ffTime(dur)];
 }
 
 const dbToAmp = (db) => Math.pow(10, db / 20);
 
 function safeName(s, fallback) {
-  const v = (s || "").replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, " ").trim();
+  const v = (s || "").replace(/[\\/:*?\"<>|]+/g, "").replace(/\s+/g, " ").trim();
   return v || fallback || "track";
 }
 

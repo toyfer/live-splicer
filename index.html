@@ -65,7 +65,7 @@
     <div class="row modes">
       <label class="radio">
         <input type="radio" name="output" value="tracks" checked>
-        <span><b>曲ごとに分割（ライブラリ向け・無劣化）</b><br><span class="muted small">各区間を別の M4A にし、曲名・アルバム・トラック番号を書きます。ミュージックに入れる想定</span></span>
+        <span><b>曲ごとに分割（ライブCD）</b><br><span class="muted small">JSON の区間のまま曲にする。隣の終わりと始まりが同じ時刻なら突き合わせ、空きがあればその端だけフェードする</span></span>
       </label>
       <label class="radio">
         <input type="radio" name="output" value="joined">
@@ -73,7 +73,7 @@
       </label>
       <label class="radio">
         <input type="radio" name="output" value="gapless">
-        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">AAC を 1 回だけ再エンコードして結合します。ソース時刻がほぼ連続なら突き合わせ、離れていればクロスフェードします。隙間の秒数は無音として挿入しません</span></span>
+        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">同じ時刻は突き合わせ、空きの端だけフェードして 1 本にする。隙間の秒数は無音として挿入しません</span></span>
       </label>
     </div>
     <div class="row">
@@ -85,13 +85,13 @@
           <option value="320">320 kbps</option>
         </select>
       </label>
-      <label>離れた曲間のクロスフェード
+      <label>空きの端をフェード
         <input type="checkbox" id="xuse" checked>
         <input type="number" id="xfade" value="30" step="5" min="0" max="500"> ms
       </label>
       <label>結合時のファイル名 <input type="text" id="outName" value="live-spliced.m4a"></label>
     </div>
-    <p class="muted small">分割と無劣化結合は AAC をコピーします。時刻はフレーム境界にスナップしますが、copy の切り出しがパケットと 1 対 1 になる保証はありません。クロスフェードは再エンコード結合で、約 50 ms より離れた曲間にだけ使います。年が空なら元の年を残します。</p>
+    <p class="muted small">同じ時刻は綺麗に繋ぐ。空きがある端だけ、指定 ms でフェードイン／フェードアウトする。フェードが要る連続区間はサンプルで揃えるため再エンコードし、フェードが無い区間は copy する。隙間の秒数は無音として足さない。年が空なら元の年を残します。</p>
   </section>
 
   <section class="card">
@@ -141,13 +141,13 @@
   </section>
 </main>
 
-<script src="./js/01-state.js?v=13"></script>
-<script src="./js/02-ffmpeg.js?v=13"></script>
-<script src="./js/03-wave.js?v=13"></script>
-<script src="./js/04-edit.js?v=13"></script>
-<script src="./js/05-export.js?v=13"></script>
-<script src="./js/06-run.js?v=13"></script>
-<script src="./js/07-session.js?v=13"></script>
-<script src="./js/08-bind.js?v=13"></script>
+<script src="./js/01-state.js?v=14"></script>
+<script src="./js/02-ffmpeg.js?v=14"></script>
+<script src="./js/03-wave.js?v=14"></script>
+<script src="./js/04-edit.js?v=14"></script>
+<script src="./js/05-export.js?v=14"></script>
+<script src="./js/06-run.js?v=14"></script>
+<script src="./js/07-session.js?v=14"></script>
+<script src="./js/08-bind.js?v=14"></script>
 </body>
 </html>
