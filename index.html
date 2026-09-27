@@ -34,7 +34,7 @@
     <p class="muted small">
       波形をドラッグしてから「トラックにする」を押すと、選択範囲が 1 曲として追加されます。
       赤 = カット（書き出しには使いません）、緑 = 出力するトラック、灰 = 自動検出した無音。
-      一覧の開始・終了は秒または分:秒で直接編集できます。
+      一覧の開始・終了は秒または分:秒で直接編集できます。AAC では近いフレーム境界に自動でスナップします。
     </p>
     <div class="row">
       <label class="grow">選択範囲の曲名
@@ -69,11 +69,11 @@
       </label>
       <label class="radio">
         <input type="radio" name="output" value="joined">
-        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間を AAC のまま繋ぎます。継ぎ目はフレーム境界で、曲間ゼロは保証しません</span></span>
+        <span><b>1 本に結合（無劣化）</b><br><span class="muted small">残した区間を AAC のまま繋ぎます。継ぎ目はフレーム境界の突き合わせで、クロスフェードはしません</span></span>
       </label>
       <label class="radio">
         <input type="radio" name="output" value="gapless">
-        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">AAC を 1 回だけ再エンコードして結合します。クロスフェードを使うと継ぎ目の分だけ全長が短くなります</span></span>
+        <span><b>1 本に結合（再エンコード）</b><br><span class="muted small">AAC を 1 回だけ再エンコードして結合します。ソース時刻がほぼ連続なら突き合わせ、離れていればクロスフェードします。隙間の秒数は無音として挿入しません</span></span>
       </label>
     </div>
     <div class="row">
@@ -85,13 +85,13 @@
           <option value="320">320 kbps</option>
         </select>
       </label>
-      <label>結合部のクロスフェード
+      <label>離れた曲間のクロスフェード
         <input type="checkbox" id="xuse" checked>
         <input type="number" id="xfade" value="30" step="5" min="0" max="500"> ms
       </label>
       <label>結合時のファイル名 <input type="text" id="outName" value="live-spliced.m4a"></label>
     </div>
-    <p class="muted small">分割と無劣化結合は AAC をコピーします。カット位置はフレーム境界に丸まります。ミュージックの曲間を無音ゼロにする保証はありません。年が空なら元の年を残します。</p>
+    <p class="muted small">分割と無劣化結合は AAC をコピーします。時刻はフレーム境界にスナップしますが、copy の切り出しがパケットと 1 対 1 になる保証はありません。クロスフェードは再エンコード結合で、約 50 ms より離れた曲間にだけ使います。年が空なら元の年を残します。</p>
   </section>
 
   <section class="card">
@@ -141,6 +141,6 @@
   </section>
 </main>
 
-<script src="./app.js?v=11"></script>
+<script src="./app.js?v=12"></script>
 </body>
 </html>
