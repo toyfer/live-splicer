@@ -44,11 +44,13 @@ AAC のライブ音源から MC・インターバルを切り、**残した区�
 ```
 live-splicer/
 ├── index.html
-├── app.js
+├── js/                          責任ごとのプレーン JS
 ├── style.css
 ├── lib/                         zip 用 fflate（デプロイ時に取得）
 └── .github/workflows/pages.yml
 ```
+
+`js/` は読み込み順です。`01` 状態とスナップ、`02` ffmpeg、`03` 波形、`04` 編集とタグ、`05` 書き出し、`06` 実行、`07` JSON、`08` イベント。
 
 ## 実装メモ
 
@@ -66,4 +68,4 @@ live-splicer/
 - AAC-LC は 1024 サンプル格子（44.1 kHz なら約 23.220 ms）。時刻入力は近い境界へスナップする
 - 再エンコード結合は隣のソース時刻が約 50 ms 以内なら concat、離れていれば acrossfade。無劣化結合は常に copy + concat
 - 分割・無劣化結合とも AAC フレーム境界でカットします。copy がパケット境界と完全一致する保証、ミュージックの曲間無音ゼロの保証はありません
-- ソースの実体は `app.js.gz.b64`。Pages の workflow が `app.js` に展開する
+- 正本は `js/` のプレーン JS。gzip にはしない
