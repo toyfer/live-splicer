@@ -164,22 +164,33 @@ function ffTime(t) {
   return t.toFixed(6);
 }
 
-function copyCutArgs(k) {
+function copyCutArgs(k, opts) {
   const r = snapRange(k.start, k.end);
   const fd = state.audio && state.audio.snap ? state.audio.frameDur : 0;
   let ss = r.start;
   let dur = Math.max(0, r.end - r.start);
   if (fd > 0) {
-    ss = Math.max(0, r.start - 2 * fd);
-    dur = Math.max(fd, dur - fd);
+    const lead = opts && opts.prime && r.start >= 3 * fd - 1e-6 ? 1 : 0;
+    ss = Math.max(0, r.start - (2 + lead) * fd);
+    dur = Math.max(fd, dur - fd + lead * fd);
   }
   return ["-ss", ffTime(ss), "-t", ffTime(dur)];
+}
+
+function primeInfo(k) {
+  const a = state.audio;
+  if (!a || !a.snap || !(a.frameDur > 0) || !a.frameSamples) return null;
+  const r = snapRange(k.start, k.end);
+  if (r.start < 3 * a.frameDur - 1e-6) return null;
+  const frames = Math.round((r.end - r.start) / a.frameDur);
+  if (frames < 1) return null;
+  return { priming: a.frameSamples, valid: frames * a.frameSamples, sampleRate: a.sampleRate };
 }
 
 const dbToAmp = (db) => Math.pow(10, db / 20);
 
 function safeName(s, fallback) {
-  const v = (s || "").replace(/[\\/:*?\"<>|]+/g, "").replace(/\s+/g, " ").trim();
+  const v = (s || "").replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, " ").trim();
   return v || fallback || "track";
 }
 
