@@ -44,7 +44,10 @@ async function run() {
         `<p><b>完成:</b> ${files.length} 曲を書き出しました</p>` +
         `<ul class="filelist">${files.map((f) => `<li>${linkResult(f.file, f.bytes)}</li>`).join("")}</ul>` +
         `<p><button id="btnZip">まとめてダウンロード（zip）</button></p>`;
-      $("btnZip").addEventListener("click", () => downloadZip(files));
+      $("btnZip").addEventListener("click", () => {
+        log("zip を作っています");
+        downloadZip(files).catch((e) => log("zip に失敗しました: " + (e && e.message ? e.message : e)));
+      });
       log(`書き出し完了: ${files.length} 曲`);
     } else {
       let outName = safeName($("outName").value.trim() || "live-spliced.m4a", "live-spliced.m4a");
@@ -74,13 +77,14 @@ async function run() {
 }
 
 async function downloadZip(files) {
-  const mod = await import("./lib/fflate.mjs");
-  const zipped = mod.zipSync(Object.fromEntries(files.map((f) => [f.file, new Uint8Array(f.bytes.buffer)])));
+  const mod = await import("../lib/fflate.mjs");
+  const zipped = mod.zipSync(Object.fromEntries(files.map((f) => [f.file, new Uint8Array(f.bytes.buffer, f.bytes.byteOffset, f.bytes.byteLength)])));
   const blob = new Blob([zipped], { type: "application/zip" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "live-tracks.zip";
   a.click();
+  log(`zip を保存しました（${files.length} 曲 / ${(blob.size / 1048576).toFixed(1)} MB）`);
 }
 
 async function readTags() {
